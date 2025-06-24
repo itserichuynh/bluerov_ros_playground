@@ -9,14 +9,17 @@ class Bridge(object):
         conn (TYPE): MAVLink connection
         data (dict): Deal with all data
     """
-    def __init__(self, device='udp:192.168.2.1:14550', baudrate=115200):
+    def __init__(self, device='udpin:0.0.0.0:14550', baudrate=115200):
         """
         Args:
             device (str, optional): Input device
                 https://ardupilot.github.io/MAVProxy/html/getting_started/starting.html#master
             baudrate (int, optional): Baudrate for serial communication
         """
-        self.conn = mavutil.mavlink_connection(device, baud=baudrate)
+        self.conn = mavutil.mavlink_connection(device)
+        # print('here1')
+        self.conn.wait_heartbeat()
+        # print('here2')
         self.data = {}
 
     def get_data(self):
@@ -33,12 +36,16 @@ class Bridge(object):
         Returns:
             TYPE: dict
         """
+        self.conn.mav.param_request_list_send(
+            self.conn.target_system, self.conn.target_component
+        )
         msgs = []
         while True:
             msg = self.conn.recv_match()
             if msg != None:
                 msgs.append(msg)
             else:
+                # print("Read nothing :(")
                 break
         return msgs
 
@@ -50,6 +57,8 @@ class Bridge(object):
         # Update dict
         for msg in msgs:
             self.data[msg.get_type()] = msg.to_dict()
+            # print(msg.get_type(), msg.to_dict())
+        # print(self.data)
 
     def print_data(self):
         """ Debug function, print data dict

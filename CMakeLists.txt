@@ -1,5 +1,8 @@
-cmake_minimum_required(VERSION 2.8.3)
-project(bluerov_ros_playground)
+cmake_minimum_required(VERSION 3.10)
+project(bluerov_ros2)
+
+find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -7,9 +10,8 @@ project(bluerov_ros_playground)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS
-  rospy
-)
+find_package(rclpy REQUIRED)
+
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -18,7 +20,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
 ## See http://ros.org/doc/api/catkin/html/user_guide/setup_dot_py.html
-catkin_python_setup()
+# catkin_python_setup()
 
 ################################################
 ## Declare ROS messages, services and actions ##
@@ -100,12 +102,12 @@ catkin_python_setup()
 ## LIBRARIES: libraries you create in this project that dependent projects also need
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
-catkin_package(
+# catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES bluerov_ros_playground
 #  CATKIN_DEPENDS rospy
 #  DEPENDS system_lib
-)
+# )
 
 ###########
 ## Build ##
@@ -113,10 +115,10 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
-include_directories(
+# include_directories(
 # include
-  ${catkin_INCLUDE_DIRS}
-)
+#   ${catkin_INCLUDE_DIRS}
+# )
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
@@ -177,33 +179,35 @@ include_directories(
 # )
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
-install(FILES
-  launch/gazebo.launch
-  launch/gazebo_teleop.launch
-  launch/gazebo_sitl.launch
-  launch/rviz.launch
-  launch/mav_pluginlists.yaml
-  launch/user_mav.launch
-  launch/video.launch
-  launch/bluerov2_node.launch
-  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
-)
+install(DIRECTORY launch DESTINATION share/${PROJECT_NAME}/)
 
 install(DIRECTORY
   model
   config
-  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+  DESTINATION share/${PROJECT_NAME}
 )
 
-catkin_install_python(PROGRAMS
+# catkin_install_python(PROGRAMS
+#   src/bluerov/bin/user_mav
+#   src/bluerov/bin/video
+#   src/bluerov/gazebo_teleop.py
+#   src/bluerov/sitl.py
+#   src/bridge/bridge.py
+#   src/bridge/bluerov_node.py
+#   src/bridge/node
+#   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+# )
+
+install(PROGRAMS
   src/bluerov/bin/user_mav
   src/bluerov/bin/video
-  src/bluerov/gazebo_teleop.py
-  src/bluerov/sitl.py
+  src/bluerov/pubs.py
+  src/bluerov/subs.py
+  src/bluerov/user.py
   src/bridge/bridge.py
   src/bridge/bluerov_node.py
   src/bridge/node
-  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 #############
@@ -218,3 +222,5 @@ catkin_install_python(PROGRAMS
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
+
+ament_package()

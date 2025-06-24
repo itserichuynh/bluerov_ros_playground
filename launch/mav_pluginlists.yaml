@@ -1,20 +1,31 @@
-plugin_blacklist:
-# common
-- 3dr_radio
-- actuator_control
-- ftp
-- global_position
-- safety_area
-- setpoint_attitude
-- sys_time
-# extras
-- image_pub
-- 'mocap_*'
-- px4flow
-- 'vision_*'
-- distance_sensor
-- vibration
-- altitude
-
-plugin_whitelist: []
-#- 'sys_*'
+mavros_node:
+  ros__parameters:
+    plugins:
+      - sys_time
+      - sys_status
+      - param
+      - command
+      - ftp
+      - imu
+      - gps
+      - manual_control
+      - setpoint_velocity
+      - setpoint_position
+      - setpoint_attitude
+      - setpoint_trajectory
+      - setpoint_accel
+      - local_position
+      - global_position
+      - 3dr_radio
+      - safety_area
+      - vibration
+      - actuator_control
+      - rc_io
+      - mocap
+      - distance_sensor
+      - landing_target
+      - fake_gps
+      - log_transfer
+      - esc_telemetry
+      - odometry
+      - debug_value

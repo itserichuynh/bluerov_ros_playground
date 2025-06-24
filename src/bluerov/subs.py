@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 
-import rospy
+import rclpy
 import time
 import yaml
+import re
 
 
 class Subs(object):
@@ -13,12 +14,14 @@ class Subs(object):
         topics (TYPE): Description
     """
 
-    def __init__(self):
+    def __init__(self, node):
         # Dict with all data
         self.data = {}
         # Get data from topic list
         self.topics = [
         ]
+
+        self.node = node
 
         self.subscribe_topics()
 
@@ -39,6 +42,7 @@ class Subs(object):
         """
 
         # The first item will be empty
+        print(path)
         keys = path.split('/')[1:]
         current_level = self.data
         for part in keys:
@@ -47,7 +51,7 @@ class Subs(object):
                 current_level[part] = {}
             current_level = current_level[part]
         if value is not {}:
-            current_level.update(yaml.load(str(value)))
+            current_level.update(yaml.load(str(value), Loader=yaml.Loader))
 
     def subscribe_topic(self, topic, msg_type, queue_size=1, callback=None):
         """ Subscribe in ROS topic
@@ -62,7 +66,17 @@ class Subs(object):
         self.set_data(topic)
         if callback == None:
             callback = self.callback
-        rospy.Subscriber(topic, msg_type, callback, callback_args=topic, queue_size=queue_size)
+        if 'servo' in topic:
+            paths = topic.split('/')
+            servo_id = None
+            for path in paths:
+                if 'servo' in path:
+                    servo_id = int(re.search('[0-9]', path).group(0))
+                    # Found valid id !
+                    break
+            self.node.create_subscription(msg_type, topic, lambda msg: callback(msg, servo_id), queue_size)
+        else:
+            self.node.create_subscription(msg_type, topic, callback, queue_size)
 
     def subscribe_topics(self):
         """ Subscribe to class topics
@@ -77,6 +91,7 @@ class Subs(object):
             data (string): Data from ROS topic
             topic (string): ROS topic name
         """
+        print('from here')
         self.set_data(topic, data)
 
 
@@ -84,8 +99,8 @@ if __name__ == '__main__':
     import sensor_msgs.msg
 
     try:
-        rospy.init_node('get_mav_data')
-    except rospy.ROSInterruptException as error:
+        rclpy.init('get_mav_data')
+    except rclpy.ROSInterruptException as error:
         print('pubs error with ROS: ', error)
         exit(1)
 
@@ -94,10 +109,10 @@ if __name__ == '__main__':
 
     def print_voltage():
         try:
-            rospy.loginfo(sub.get_data()['mavros']['battery']['voltage'])
+            rclpy.loginfo(sub.get_data()['mavros']['battery']['voltage'])
         except Exception as error:
             print(error)
-
-    while not rospy.is_shutdown():
+    rclpy
+    while not rclpy.ok():
         print_voltage()
         time.sleep(1)

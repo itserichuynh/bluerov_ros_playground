@@ -5,23 +5,25 @@ from __future__ import division
 import json
 import math
 import re
-import rospy
+import rclpy
 import sys
 import time
 
 from bridge import Bridge
+from rclpy.node import Node
+
 
 try:
     from pubs import Pubs
     from subs import Subs
-    from video import Video
+    # from video import Video
 except:
     from bluerov.pubs import Pubs
     from bluerov.subs import Subs
-    from bluerov.video import Video
+    # from bluerov.video import Video
 
 # convert opencv image to ros image msg
-from cv_bridge import CvBridge
+# from cv_bridge import CvBridge
 
 # msgs type
 from geometry_msgs.msg import TwistStamped
@@ -33,22 +35,24 @@ from std_msgs.msg import Bool
 from std_msgs.msg import String
 from std_msgs.msg import UInt16
 
-class BlueRov(Bridge):
-    def __init__(self, device='udp:192.168.2.1:14550', baudrate=115200):
+class BlueRov(Node, Bridge):
+    def __init__(self, device='udpin:0.0.0.0:14550', baudrate=115200):
         """ BlueRov ROS Bridge
 
         Args:
             device (str, optional): mavproxy device description
             baudrate (int, optional): Serial baudrate
         """
-        super(BlueRov, self).__init__(device, baudrate)
-        self.pub = Pubs()
-        self.sub = Subs()
-        self.ROV_name = 'BlueRov2'
+        # super(BlueRov, self).__init__(device, baudrate)
+        Node.__init__(self, 'bluerov_node')         # sets the node name
+        Bridge.__init__(self, device, baudrate)     # initializes MAVLink communication
+        self.pub = Pubs(self)
+        self.sub = Subs(self)
+        self.ROV_name = 'bluerov'
         self.model_base_link = '/base_link'
 
-        self.video = Video()
-        self.video_bridge = CvBridge()
+        # self.video = Video()
+        # self.video_bridge = CvBridge()
 
         self.pub_topics = [
             [
@@ -57,12 +61,12 @@ class BlueRov(Bridge):
                 BatteryState,
                 1
             ],
-            [
-                self._create_camera_msg,
-                '/camera/image_raw',
-                Image,
-                1
-            ],
+            # [
+            #     self._create_camera_msg,
+            #     '/camera/image_raw',
+            #     Image,
+            #     1
+            # ],
             [
                 self._create_ROV_state,
                 '/state',
@@ -122,16 +126,20 @@ class BlueRov(Bridge):
 
         for _, topic, msg, queue in self.pub_topics:
             self.mavlink_msg_available[topic] = 0
-            self._pub_subscribe_topic(topic, msg, queue)
+            self._pub_topic(topic, msg, queue)
+            # self.get_logger().info(f"{topic}, {msg}, {queue}")
 
         for topic in self.sub_topics:
             if len(topic) <= 4:
                 callback, topic_name, msg, queue = topic
-                self._sub_subscribe_topic(topic_name, msg, queue, callback)
+                self._sub_topic(topic_name, msg, queue, callback)
             else:
                 callback, topic_name, msg, queue, arg = topic
                 for name in arg:
-                    self._sub_subscribe_topic(topic_name.format(name), msg, queue, callback)
+                    self._sub_topic(topic_name.format(name), msg, queue, callback)
+
+        timer_period = 0.01  # seconds
+        self.timer = self.create_timer(timer_period, self.publish)
 
     @staticmethod
     def _callback_from_topic(topic):
@@ -145,7 +153,7 @@ class BlueRov(Bridge):
         """
         return topic.replace('/', '_') + '_callback'
 
-    def _pub_subscribe_topic(self, topic, msg, queue_size=1):
+    def _pub_topic(self, topic, msg, queue_size=1):
         """ Subscribe to a topic using the publisher
 
         Args:
@@ -153,9 +161,9 @@ class BlueRov(Bridge):
             msg (TYPE): ROS message type
             queue_size (int, optional): Queue size
         """
-        self.pub.subscribe_topic(self.ROV_name + topic, msg, queue_size)
+        self.pub.publish_topic(self.ROV_name + topic, msg, queue_size)
 
-    def _sub_subscribe_topic(self, topic, msg, queue_size=1, callback=None):
+    def _sub_topic(self, topic, msg, queue_size=1, callback=None):
         """ Subscribe to a topic using the subscriber
 
         Args:
@@ -166,7 +174,7 @@ class BlueRov(Bridge):
         """
         self.sub.subscribe_topic(self.ROV_name + topic, msg, queue_size, callback)
 
-    def _set_servo_callback(self, msg, topic):
+    def _set_servo_callback(self, msg, servo_id):
         """ Set servo from topic
 
         Args:
@@ -176,16 +184,7 @@ class BlueRov(Bridge):
         Returns:
             None: Description
         """
-        paths = topic.split('/')
-        servo_id = None
-        for path in paths:
-            if 'servo' in path:
-                servo_id = int(re.search('[0-9]', path).group(0)) + 1
-                # Found valid id !
-                break
-        else:
-            # No valid id
-            return
+        self.get_logger().info(f"servo id is {servo_id}")
 
         self.set_servo_pwm(servo_id, msg.data)
 
@@ -272,7 +271,7 @@ class BlueRov(Bridge):
         Args:
             msg (ROS message): ROS message with header
         """
-        msg.header.stamp = rospy.Time.now()
+        msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = self.model_base_link
 
     def _create_odometry_msg(self):
@@ -415,21 +414,22 @@ class BlueRov(Bridge):
         bat.percentage = self.get_data()['BATTERY_STATUS']['battery_remaining']/100
         self.pub.set_data('/battery', bat)
 
-    def _create_camera_msg(self):
-        if not self.video.frame_available():
-            return
-        frame = self.video.frame()
-        image_msg = Image()
-        self._create_header(image_msg)
-        height, width, channels = frame.shape
-        image_msg.width = width
-        image_msg.height = height
-        image_msg.encoding = 'bgr8'
-        image_msg.data = frame
-        msg = self.video_bridge.cv2_to_imgmsg(frame, "bgr8")
-        self._create_header(msg)
-        msg.step = int(msg.step)
-        self.pub.set_data('/camera/image_raw', msg)
+    # def _create_camera_msg(self):
+    #     if not self.video.frame_available():
+    #         self.get_logger().info(f"no frame")
+    #         return
+    #     frame = self.video.frame()
+    #     image_msg = Image()
+    #     self._create_header(image_msg)
+    #     height, width, channels = frame.shape
+    #     image_msg.width = width
+    #     image_msg.height = height
+    #     image_msg.encoding = 'bgr8'
+    #     image_msg.data = frame
+    #     msg = self.video_bridge.cv2_to_imgmsg(frame, "bgr8")
+    #     self._create_header(msg)
+    #     msg.step = int(msg.step)
+    #     self.pub.set_data('/camera/image_raw', msg)
 
     def _create_ROV_state(self):
         """ Create ROV state message from ROV data
@@ -462,23 +462,25 @@ class BlueRov(Bridge):
         # Create angle from pwm
         camera_angle = -45*camera_angle/400
 
-        base_mode = self.get_data()['HEARTBEAT']['base_mode']
-        custom_mode = self.get_data()['HEARTBEAT']['custom_mode']
+        if self.get_data()['HEARTBEAT']['type'] == 12: # Onboard companion controller
+            base_mode = self.get_data()['HEARTBEAT']['base_mode']
+            custom_mode = self.get_data()['HEARTBEAT']['custom_mode']
 
-        mode, arm = self.decode_mode(base_mode, custom_mode)
+            mode, arm = self.decode_mode(base_mode, custom_mode)
+            # self.get_logger().info(f"{base_mode}, {custom_mode}")
 
-        state = {
-            'motor': motor_throttle,
-            'light': light_on,
-            'camera_angle': camera_angle,
-            'mode': mode,
-            'arm': arm
-        }
+            state = {
+                'motor': motor_throttle,
+                'light': light_on,
+                'camera_angle': camera_angle,
+                'mode': mode,
+                'arm': arm
+            }
 
-        string = String()
-        string.data = str(json.dumps(state, ensure_ascii=False))
+            string = String()
+            string.data = str(json.dumps(state, ensure_ascii=False))
 
-        self.pub.set_data('/state', string)
+            self.pub.set_data('/state', string)
 
     def publish(self):
         """ Publish the data in ROS topics
@@ -486,20 +488,31 @@ class BlueRov(Bridge):
         self.update()
         for sender, topic, _, _ in self.pub_topics:
             try:
-                if time.time() - self.mavlink_msg_available[topic] > 1:
+                delta =  time.time() - self.mavlink_msg_available[topic]
+
+                if delta > 1:
                     sender()
             except Exception as e:
+                # self.get_logger().info(f"{e}")
                 self.mavlink_msg_available[topic] = time.time()
-                print(e)
+
+def main(args=None):
+    rclpy.init(args=args)
+
+    # You can set the node name here if needed by creating a Node subclass
+    # But since your class doesn't subclass rclpy.Node, no need to pass name
+
+    bluerov = BlueRov()
+
+    # try:
+    #     while rclpy.ok():
+    #         bluerov.publish()
+    # except KeyboardInterrupt:
+    #     pass
+    rclpy.spin(bluerov)
+
+    rclpy.shutdown()
 
 if __name__ == '__main__':
-    try:
-        rospy.init_node('user_node', log_level=rospy.DEBUG)
-    except rospy.ROSInterruptException as error:
-        print('pubs error with ROS: ', error)
-        exit(1)
+    main()
 
-    bluerov = BlueRov(device='udp:localhost:14550')
-
-    while not rospy.is_shutdown():
-        bluerov.publish()
